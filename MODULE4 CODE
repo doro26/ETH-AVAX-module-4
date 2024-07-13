@@ -1,0 +1,129 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+
+contract Ananya is ERC20, Ownable, ERC20Burnable {
+    constructor() ERC20("dekgen game", "DGN") Ownable(msg.sender) {
+        // Initializes the token with the name "dekgen game" and symbol "DGN"
+    }
+
+    enum RewardType { Basic, Standard, Premium, Ultra, Ultimate }
+
+    struct Participant {
+        address participantAddress;
+        uint256 tokenAmount;
+    }
+
+    Participant[] public participantQueue;
+
+    struct RewardCollection {
+        uint256 basic;
+        uint256 standard;
+        uint256 premium;
+        uint256 ultra;
+        uint256 ultimate;
+    }
+
+    mapping(address => RewardCollection) public userRewards;
+
+    event TokensAcquired(address indexed participant, uint256 tokenAmount);
+    event TokensDistributed(address indexed participant, uint256 tokenAmount);
+    event TokensSent(address indexed sender, address indexed recipient, uint256 amount);
+    event RewardRedeemed(address indexed user, RewardType rewardType, uint256 rewardCost);
+    event TokensBurned(address indexed account, uint256 amount);
+
+    // Function for users to purchase tokens and be added to the queue
+    function acquireTokens(address participantAddress, uint256 tokenAmount) public {
+        require(participantAddress != address(0), "Invalid address");
+        require(tokenAmount > 0, "Invalid token amount");
+        participantQueue.push(Participant({participantAddress: participantAddress, tokenAmount: tokenAmount}));
+        emit TokensAcquired(participantAddress, tokenAmount);
+    }
+
+    // Function for the owner to mint tokens for all participants in the queue
+    function distributeTokens(uint256 batchSize) public onlyOwner {
+        uint256 queueLength = participantQueue.length;
+        uint256 iterations = batchSize < queueLength ? batchSize : queueLength;
+        for (uint256 i = 0; i < iterations; i++) {
+            Participant memory lastParticipant = participantQueue[queueLength - 1];
+            _mint(lastParticipant.participantAddress, lastParticipant.tokenAmount);
+            participantQueue.pop();
+            emit TokensDistributed(lastParticipant.participantAddress, lastParticipant.tokenAmount);
+            queueLength--;
+        }
+    }
+
+    // Function for users to transfer tokens to another address
+    function sendTokens(address recipient, uint256 amount) public {
+        require(recipient != address(0), "Invalid recipient address");
+        require(amount <= balanceOf(msg.sender), "Insufficient balance");
+        _transfer(msg.sender, recipient, amount);
+        emit TokensSent(msg.sender, recipient, amount);
+    }
+
+    // Function for users to redeem tokens for various reward types
+    function redeemReward(RewardType rewardType) public {
+        uint256 rewardCost = getRewardCost(rewardType);
+        require(balanceOf(msg.sender) >= rewardCost, "Insufficient tokens to redeem reward");
+
+        if (rewardType == RewardType.Basic) {
+            userRewards[msg.sender].basic += 1;
+        } else if (rewardType == RewardType.Standard) {
+            userRewards[msg.sender].standard += 1;
+        } else if (rewardType == RewardType.Premium) {
+            userRewards[msg.sender].premium += 1;
+        } else if (rewardType == RewardType.Ultra) {
+            userRewards[msg.sender].ultra += 1;
+        } else if (rewardType == RewardType.Ultimate) {
+            userRewards[msg.sender].ultimate += 1;
+        }
+        _burn(msg.sender, rewardCost);
+        emit RewardRedeemed(msg.sender, rewardType, rewardCost);
+    }
+
+    // Function for the owner to burn tokens from any account
+    function burnFromAccount(address account, uint256 amount) public onlyOwner {
+        _burn(account, amount);
+        emit TokensBurned(account, amount);
+    }
+
+    // Function for users to check their token balance
+    function getMyTokenBalance() public view returns (uint256) {
+        return balanceOf(msg.sender);
+    }
+
+    function getRewardCost(RewardType rewardType) internal pure returns (uint256) {
+        if (rewardType == RewardType.Basic) {
+            return 15;
+        } else if (rewardType == RewardType.Standard) {
+            return 25;
+        } else if (rewardType == RewardType.Premium) {
+            return 35;
+        } else if (rewardType == RewardType.Ultra) {
+            return 45;
+        } else if (rewardType == RewardType.Ultimate) {
+            return 55;
+        } else {
+            revert("Invalid reward type");
+        }
+    }
+
+    function transfer(address to, uint256 amount) public virtual override returns (bool) {
+        _transfer(_msgSender(), to, amount);
+        return true;
+    }
+
+    function transferFrom(address sender, address recipient, uint256 amount) public virtual override returns (bool) {
+        _transfer(sender, recipient, amount);
+        _approve(sender, _msgSender(), allowance(sender, _msgSender()) - amount);
+        return true;
+    }
+
+    function approve(address spender, uint256 amount) public virtual override returns (bool) {
+        _approve(_msgSender(), spender, amount);
+        return true;
+}
+}
